@@ -1,0 +1,11 @@
+groups:
+  - name: log-monitoring
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(log_count{level="error"}[5m])) by (service) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate in {{ $labels.service }}"
+          description: "Error rate: {{ $value }}/s over 5m"
