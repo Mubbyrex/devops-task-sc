@@ -1,0 +1,40 @@
+yaml
+Copy
+groups:
+- name: mongodb-alerts
+  rules:
+  - alert: HighQueryLatency
+    expr: mongodb_op_latency_seconds{type="query"} > 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High query latency detected"
+      description: "Query latency is above 100ms"
+
+  - alert: ReplicationLag
+    expr: mongodb_replset_member_lag_seconds > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High replication lag"
+      description: "Replication lag is above 10 seconds"
+
+  - alert: ConnectionPoolSaturation
+    expr: mongodb_connections_current / mongodb_connections_available > 0.8
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Connection pool near capacity"
+      description: "More than 80% of connections are in use"
+
+  - alert: LowCacheHitRatio
+    expr: rate(mongodb_cache_hits_total[5m]) / rate(mongodb_cache_operations_total[5m]) < 0.9
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Low cache hit ratio"
+      description: "Cache hit ratio is below 90%"
