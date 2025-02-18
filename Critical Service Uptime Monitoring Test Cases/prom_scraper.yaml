@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  # OpenTelemetry Collector metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8889']
+    metrics_path: /metrics
+    
+  # Metrics exposed by OpenTelemetry
+  - job_name: 'otel-metrics'
+    static_configs:
+      - targets: ['otel-collector:8889']
+    metrics_path: /metrics
+    honor_labels: true  # Keeps original metric labels
+    relabel_configs:
+      - source_labels: [__name__]
+        regex: 'auth_.*'  # Only scrape auth-related metrics
+        action: keep
+
+  # Health check for OTEL collector
+  - job_name: 'otel-health'
+    static_configs:
+      - targets: ['otel-collector:13133']
+    metrics_path: /health
+    relabel_configs:
+      - source_labels: [__name__]
+        regex: '^health.*'
+        action: keep
