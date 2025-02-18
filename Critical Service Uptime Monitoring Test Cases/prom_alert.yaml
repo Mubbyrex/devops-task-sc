@@ -1,0 +1,29 @@
+groups:
+- name: auth-service-alerts
+  rules:
+  - alert: HighAuthFailureRate
+    expr: rate(auth_requests{status="failed"}[5m]) / rate(auth_requests_total[5m]) > 0.01
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High authentication failure rate"
+      description: "Authentication failure rate is above 1%"
+
+  - alert: AuthServiceLatency
+    expr: histogram_quantile(0.95, rate(auth_token_issuance_duration_bucket[5m])) > 0.2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High authentication latency"
+      description: "95th percentile of authentication latency is above 200ms"
+
+  - alert: TraceSampleLoss
+    expr: rate(otel_trace_span_events_total{status="dropped"}[5m]) > 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Trace sampling loss detected"
+      description: "Some traces are being dropped"
