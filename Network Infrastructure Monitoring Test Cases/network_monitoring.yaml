@@ -1,0 +1,123 @@
+import requests
+import time
+import dns.resolver
+import ssl
+import socket
+from datetime import datetime
+
+from opentelemetry import trace
+from opentelemetry import metrics
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.semconv.resource import ResourceAttributes
+
+# OpenTelemetry setup
+resource = Resource.create({
+    ResourceAttributes.SERVICE_NAME: "network-monitor"
+})
+
+# Trace setup
+trace_provider = TracerProvider(resource=resource)
+otlp_span_exporter = OTLPSpanExporter(endpoint="otel-collector:4317", insecure=True)
+span_processor = BatchSpanProcessor(otlp_span_exporter)
+trace_provider.add_span_processor(span_processor)
+trace.set_tracer_provider(trace_provider)
+
+# Metrics setup
+metric_provider = MeterProvider(resource=resource)
+otlp_metric_exporter = OTLPMetricExporter(endpoint="otel-collector:4317", insecure=True)
+metric_provider.add_metric_reader(otlp_metric_exporter)
+metrics.set_meter_provider(metric_provider)
+
+# Get tracer and meter
+tracer = trace.get_tracer(__name__)
+meter = metrics.get_meter(__name__)
+
+# Create metrics
+latency_histogram = meter.create_histogram(
+    name="network.latency",
+    description="Network latency in milliseconds",
+    unit="ms"
+)
+
+packet_loss_counter = meter.create_counter(
+    name="network.packet_loss",
+    description="Number of packets lost"
+)
+
+dns_resolution_histogram = meter.create_histogram(
+    name="dns.resolution_time",
+    description="DNS resolution time in milliseconds",
+    unit="ms"
+)
+
+class NetworkMonitor:
+    def __init__(self):
+        self.targets = [
+            'app1.example.com',
+            'app2.example.com',
+            'cdn.example.com'
+        ]
+
+    def check_latency(self):
+        for target in self.targets:
+            with tracer.start_as_current_span("check_latency") as span:
+                try:
+                    span.set_attribute("target", target)
+                    start_time = time.time()
+                    requests.get(f'https://{target}')
+                    latency = (time.time() - start_time) * 1000
+                    latency_histogram.record(
+                        latency,
+                        {"target": target}
+                    )
+                    span.set_attribute("latency_ms", latency)
+                except Exception as e:
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                    print(f"Error checking latency for {target}: {e}")
+
+    def check_dns(self):
+        for target in self.targets:
+            with tracer.start_as_current_span("check_dns") as span:
+                try:
+                    span.set_attribute("target", target)
+                    start_time = time.time()
+                    dns.resolver.resolve(target, 'A')
+                    resolution_time = (time.time() - start_time) * 1000
+                    dns_resolution_histogram.record(
+                        resolution_time,
+                        {"target": target}
+                    )
+                    span.set_attribute("resolution_time_ms", resolution_time)
+                except Exception as e:
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                    print(f"Error checking DNS for {target}: {e}")
+
+    def check_ssl(self):
+        with tracer.start_as_current_span("check_ssl") as span:
+            for target in self.targets:
+                try:
+                    span.set_attribute("target", target)
+                    cert = ssl.get_server_certificate((target, 443))
+                    x509 = ssl.PEM_cert_to_DER_cert(cert)
+                    expiry = ssl.DER_cert_to_PEM_cert(x509)
+                    span.set_attribute("ssl_expiry_days", expiry)
+                except Exception as e:
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                    print(f"Error checking SSL for {target}: {e}")
+
+    def run(self, interval=60):
+        while True:
+            with tracer.start_as_current_span("monitoring_iteration") as span:
+                self.check_latency()
+                self.check_dns()
+                self.check_ssl()
+                time.sleep(interval)
+
+if __name__ == '__main__':
+    monitor = NetworkMonitor()
+    monitor.run()
