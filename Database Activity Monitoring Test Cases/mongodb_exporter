@@ -1,0 +1,6 @@
+mongodb_exporter:
+  uri: "mongodb://devopsuser:pass@gomoneydbcluster1:27017"
+  collect_all: true
+  export_diagnostics: true
+  compatibility_mode: true
+  direct_connect: true
