@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-conf
+  namespace: monitoring
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 1000
+      resourcedetection:
+        detectors: [env, k8s]
+        timeout: 2s
+      k8s_tagger:
+        extract:
+          metadata: [namespace, pod, deployment, node]
+
+    exporters:
+      awscloudwatchlogs:
+        region: us-west-2
+        log_group_name: "/microservices/otel-logs"
+        log_stream_name: "${k8s.pod.name}"
+        log_retention_days: 30
+
+      azuremonitor:
+        instrumentation_key: "${AZURE_INSTRUMENTATION_KEY}"
+        log:
+          default_log_name: "k8s-logs"
+          disable_standard_metrics: true
+
+      prometheusremotewrite:
+        endpoint: "http://prometheus-server.monitoring:9090/api/v1/write"
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, resourcedetection, k8s_tagger]
+          exporters: [otlp]
+
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, resourcedetection, k8s_tagger]
+          exporters: [awscloudwatchlogs, azuremonitor]
+
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, resourcedetection, k8s_tagger]
+          exporters: [prometheusremotewrite]
